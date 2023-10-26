@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="description" content="WebRTC Simple Demo"/>
+  <meta charset="utf-8">
+  <title>Bob</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="author" content="Joel">
+  <style>
+    button { font-size: 20px; padding: 5px 15px; font-family: monospace; display: block; margin: 15px 0; text-align: left; }
+    textarea { width: 500px; height: 40px; }
+    textarea.sdp { width: 500px; height: 100px; }
+    label { margin-top: 15px; }
+    video { border: 1px solid red; width: 500px; }
+    #logs {
+      position: absolute; right: 0; top: 0; height: 99%; width: 400px; background: whitesmoke; border-left: 1px solid gray;
+      font-family: monospace; padding: 0 10px; font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+<h1>WebRTC Demo - Bob</h1>
+<h2>Status: <span id="status-label">Off</span></h2>
+<div class="container">
+  <label>Offer SDP:</label><br><textarea id="offer-txt" class="sdp"></textarea>
+  <button id="btn-create-answer">createAnswer()</button>
+  <label>SPD:</label><br><textarea id="answer-sdp" class="sdp"></textarea>
+  <hr>
+  Media Stream:<br><video id="remote-video" class="remote-video" playsinline autoplay></video>
+  <button id="btn-terminate">End Connection</button>
+</div>
+<div id="logs"></div>
+
+<script>
+  const PEER_CONFIG = { iceServers: [
+      { urls: 'stun:stun.l.google.com:19302'  },
+      { urls: 'stun:stun1.1.google.com:19302' },
+      { urls: 'stun:stun2.1.google.com:19302' },
+    ]};
+  const log = (txt) => document.getElementById('logs').innerText += `\n${txt}`;
+  const status = document.getElementById('status-label');
+  const remoteVideo = document.getElementById('remote-video');
+  let peer, localStream, remoteStream;
+
+  document.getElementById('btn-create-answer').addEventListener('click', async () => {
+    await initMedia();
+
+    // Init peer
+    peer = new RTCPeerConnection(PEER_CONFIG);
+    log('new RTCPeerConnection() created');
+
+    remoteStream = new MediaStream();
+    log('new MediaStream() created');
+    remoteVideo.srcObject = remoteStream;
+    log('remoteStream set to the html video object');
+
+    // Add remote tracks (from the peer) to our remoteStream variable
+    peer.ontrack = async (ev) => {
+      log(`Adding remote tracks: remoteStream.addTrack()`);
+      ev.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+    }
+
+    // Add local tracks to the peer
+    log(`Adding local tracks: peer.addTrack() --> localStream`);
+    localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+
+    peer.onconnectionstatechange = (ev) => {
+      if (ev.target.connectionState === 'connected') {
+        status.innerText = 'Connected';
+        log(`connectionState === 'connected'`);
+      }
+    }
+    peer.onicecandidate = ev => gatherICECandidate(ev);
+    peer.oniceconnectionstatechange = ev => ICEConnectionChange(ev);
+
+    const offer = document.getElementById('offer-txt').value;
+    await peer.setRemoteDescription(JSON.parse(offer));
+    log(`peer.setRemoteDescription(offer)`);
+
+    const answer = await peer.createAnswer();
+    log(`peer.createAnswer() -> Answer created`);
+    await peer.setLocalDescription(answer);
+    log(`peer.setLocalDescription(answer)`);
+
+  });
+
+
+  async function initMedia() {
+    const constraints = { audio: true, video: true, };
+    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    log('getUserMedia() - Getting stream from CAM and MIC');
+    const tracks = {
+      video: localStream.getVideoTracks(),
+      audio: localStream.getAudioTracks(),
+    };
+    if (tracks.video.length) { log('Using video ' + tracks.video[0].label); }
+    if (tracks.audio.length) { log('Using audio ' + tracks.audio[0].label); }
+  }
+
+
+  function gatherICECandidate(ev) {
+    log(`\nNew ICE candidate found: ${JSON.stringify(ev.candidate)}`);
+    log('RTCPeerConnection.canTrickleIceCandidates = ' + peer.canTrickleIceCandidates);
+    log('RTCPeerConnection.iceGatheringState = ' + peer.iceGatheringState);
+    log('RTCPeerConnection.iceConnectionState = ' + peer.iceConnectionState);
+
+    if (peer.iceGatheringState === 'gathering') { log('Still gathering, wait for more ICE'); }
+    if (peer.iceGatheringState === 'complete') { log('ICE GATHERING COMPLETE!!'); }
+
+    document.getElementById('answer-sdp').value = JSON.stringify(peer.localDescription);
+  }
+
+  function ICEConnectionChange(ev) {    // iceConnectionState: new -> checking -> connected
+    log('RTCPeerConnection.iceConnectionState = ' + peer.iceConnectionState);
+    if (peer.iceConnectionState === 'connected') {
+      status.innerText = 'Connected';
+    }
+  }
+
+  document.getElementById('btn-terminate').addEventListener('click', () => {
+    if (peer) { peer.close(); }
+    if (localStream) { localStream.getTracks().forEach(track => track.stop()); }
+    if (remoteStream) { remoteStream.getTracks().forEach(track => track.stop()); }
+    log(`peer.close()`);
+    log(`localStream.getTracks().forEach(track => track.stop())`);
+    log(`remoteStream.getTracks().forEach(track => track.stop())`);
+  });
+
+</script>
+
+</body>
+</html>

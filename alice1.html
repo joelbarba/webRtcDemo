@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="description" content="WebRTC Simple Demo"/>
+  <meta charset="utf-8">
+  <title>Alice</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="author" content="Joel">
+  <style>
+    button { font-size: 20px; padding: 5px 15px; font-family: monospace; display: block; margin: 15px 0; }
+    textarea { width: 500px; height: 40px; }
+    textarea.sdp { width: 500px; height: 100px; }
+    label { margin-top: 15px; }
+  </style>
+</head>
+<body>
+<h1>WebRTC Demo - Alice</h1>
+<h2>Status: <span id="status-label">Off</span></h2>
+<div class="container">
+  <button id="btn-new-pc">peer = new RTCPeerConnection();</button>
+  <button id="btn-new-dc">dataChannel = peer.createDataChannel();</button>
+  <button id="btn-create-offer">peer.createOffer();</button>
+  <label>Offer SPD:</label><br><textarea id="offer-sdp" class="sdp"></textarea>
+  <hr>
+  <label>Answer SPD:</label><br><textarea id="answer-sdp" class="sdp"></textarea>
+  <button id="btn-set-answer">peer.setRemoteDescription(answer)</button>
+  <hr>
+  <label>Send Message:</label><br><textarea id="outgoing-msg"></textarea>
+</div>
+
+<script>
+  const status = document.getElementById('status-label');
+  let peer, dataChannel;
+
+  document.getElementById('btn-new-pc').addEventListener('click', () => {
+    peer = new RTCPeerConnection();
+    status.innerText = 'New Peer Connection created';
+
+    peer.onicecandidate = () => {
+      status.innerText += `\nNew ICE Candidate found`;
+      document.getElementById('offer-sdp').value = JSON.stringify(peer.localDescription);
+    };
+  });
+
+  document.getElementById('btn-new-dc').addEventListener('click', () => {
+    dataChannel = peer.createDataChannel('my-channel');
+    status.innerText = 'New Data Channel created';
+
+    dataChannel.onopen = () => status.innerText = 'Connected';
+    dataChannel.onmessage = (ev) => status.innerText = `New message: ${ev.data}`;
+  });
+
+  document.getElementById('btn-create-offer').addEventListener('click', async () => {
+    const offer = await peer.createOffer();  // ICE Gathering
+    await peer.setLocalDescription(offer);
+    status.innerText = 'Offer created';
+  });
+
+  document.getElementById('btn-set-answer').addEventListener('click', async () => {
+    const answer = document.getElementById('answer-sdp').value;
+    peer.setRemoteDescription(JSON.parse(answer)).then(_ => status.innerText = 'Answer set');
+  });
+
+
+  const msgField = document.getElementById('outgoing-msg');
+  msgField.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      dataChannel.send(msgField.value);
+      msgField.value = '';
+    }
+  });
+
+</script>
+
+</body>
+</html>

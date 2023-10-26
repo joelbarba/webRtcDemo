@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="description" content="WebRTC Simple Demo"/>
+  <meta charset="utf-8">
+  <title>Bob</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="author" content="Joel">
+  <style>
+    button { font-size: 20px; padding: 5px 15px; font-family: monospace; display: block; margin: 15px 0; text-align: left; }
+    textarea { width: 500px; height: 40px; }
+    textarea.sdp { width: 500px; height: 100px; }
+    label { margin-top: 15px; }
+    video { border: 1px solid red; width: 500px; }
+  </style>
+</head>
+<body>
+<h1>WebRTC Demo - Bob</h1>
+<h2>Status: <span id="status-label">Off</span></h2>
+<div class="container">
+  <label>Offer SDP:</label><br><textarea id="offer-txt" class="sdp"></textarea>
+  <button id="btn-create-answer">createAnswer()</button>
+  <label>SPD:</label><br><textarea id="answer-sdp" class="sdp"></textarea>
+  <hr>
+  Media Stream:<br><video id="remote-video" class="remote-video" playsinline autoplay></video>
+  <button id="btn-terminate">End Connection</button>
+</div>
+
+
+<script>
+  const PEER_CONFIG = { iceServers: [
+      { urls: 'stun:stun.l.google.com:19302'  },
+      { urls: 'stun:stun1.1.google.com:19302' },
+      { urls: 'stun:stun2.1.google.com:19302' },
+    ]};
+  const status = document.getElementById('status-label');
+  const remoteVideo = document.getElementById('remote-video');
+  let peer, localStream, remoteStream;
+
+  document.getElementById('btn-create-answer').addEventListener('click', async () => {
+    const constraints = { audio: true, video: true, };
+    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    // Init peer
+    peer = new RTCPeerConnection(PEER_CONFIG);
+
+    // Collect remote tracks (from Alice)
+    remoteStream = new MediaStream();
+    remoteVideo.srcObject = remoteStream;
+    peer.ontrack = async (ev) => ev.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+
+    // Add local tracks to the peer
+    localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+
+    peer.onicecandidate = () => {
+      status.innerText += `\nNew ICE Candidate found`;
+      document.getElementById('answer-sdp').value = JSON.stringify(peer.localDescription);
+    };
+
+    peer.onconnectionstatechange = (ev) => {
+      if (ev.target.connectionState === 'connected') { status.innerText = 'Connected'; }
+    }
+
+    const offer = document.getElementById('offer-txt').value;
+    await peer.setRemoteDescription(JSON.parse(offer));
+
+    const answer = await peer.createAnswer();
+    await peer.setLocalDescription(answer);  // <-- after this, ICE candidate gathering starts
+  });
+
+
+  document.getElementById('btn-terminate').addEventListener('click', () => {
+    if (peer) { peer.close(); }
+    if (localStream) { localStream.getTracks().forEach(track => track.stop()); }
+    if (remoteStream) { remoteStream.getTracks().forEach(track => track.stop()); }
+    document.getElementById('offer-sdp').value = '';
+    document.getElementById('answer-sdp').value = '';
+  });
+
+</script>
+
+</body>
+</html>

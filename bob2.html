@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="description" content="WebRTC Simple Demo"/>
+  <meta charset="utf-8">
+  <title>Bob</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="author" content="Joel">
+  <style>
+    button { font-size: 20px; padding: 5px 15px; font-family: monospace; display: block; margin: 15px 0; text-align: left; }
+    textarea { width: 500px; height: 40px; }
+    textarea.sdp { width: 500px; height: 100px; }
+    label { margin-top: 15px; }
+  </style>
+</head>
+<body>
+<h1>WebRTC Demo - Bob</h1>
+<h2>Status: <span id="status-label">Off</span></h2>
+<div class="container">
+  <label>Offer SDP:</label><br><textarea id="offer-txt" class="sdp"></textarea>
+  <button id="btn-create-answer">
+    peer = new RTCPeerConnection();
+    <br>peer.setRemoteDescription(offer);
+    <br>peer.createAnswer();
+  </button>
+  <label>SPD:</label><br><textarea id="answer-sdp" class="sdp"></textarea>
+  <hr>
+  <label>Send Message:</label><br><textarea id="outgoing-msg"></textarea>
+</div>
+
+<script>
+  const status = document.getElementById('status-label');
+  let peer, dataChannel;
+
+  document.getElementById('btn-create-answer').addEventListener('click', async () => {
+    peer = new RTCPeerConnection();
+    status.innerText = 'New Peer Connection created';
+
+    peer.onicecandidate = (ev) => {
+      status.innerText += `\nNew ICE Candidate found`;
+      document.getElementById('answer-sdp').innerText = JSON.stringify(peer.localDescription);
+    };
+
+    peer.ondatachannel = (ev) => {
+      dataChannel = ev.channel;
+      dataChannel.onopen = () => status.innerText = 'Connected';
+      dataChannel.onmessage = (ev) => status.innerText = `New message: ${ev.data}`;
+    };
+
+    const offer = document.getElementById('offer-txt').value;
+    peer.setRemoteDescription(JSON.parse(offer)).then(_ => status.innerText = 'Offer set');
+
+    const answer = await peer.createAnswer();
+    await peer.setLocalDescription(answer);
+    status.innerText = 'Answer created';
+  });
+
+
+  const msgField = document.getElementById('outgoing-msg');
+  msgField.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      dataChannel.send(msgField.value);
+      msgField.value = '';
+    }
+  });
+
+</script>
+
+</body>
+</html>
